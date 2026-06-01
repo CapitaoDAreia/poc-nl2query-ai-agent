@@ -1,0 +1,24 @@
+[project]
+name = "hermes-nl2query-poc"
+version = "0.1.0"
+description = "POC para interface de linguagem natural em cima do GCP Cloud Logging usando RAG"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "psycopg2-binary>=2.9.9",
+    "python-dotenv>=1.0.1",
+    "ollama>=0.2.1",
+    
+    # Core/Ollama/Postgres
+    "langchain>=0.1.16",
+    "langchain-community>=0.0.34",
+    "langchain-postgres>=0.0.9",
+    "langchain-ollama>=0.1.0",
+    
+    # State Manager
+    "langgraph>=0.0.36",
+
+    # API
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+]

@@ -1,0 +1,81 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Contabilizei Core APIs - Hermes Mock Gateway",
+    "description": "Especificação oficial das APIs internas para o ecossistema de Contabilidade.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.contabilizei.com.br/plataforma/rest",
+      "description": "Ambiente de Produção"
+    }
+  ],
+  "paths": {
+    "/impostos/v4/impostos-a-pagar/init": {
+      "get": {
+        "x-gcp-service": "plataforma-web",
+        "summary": "Inicializa a tela de impostos a pagar do cliente",
+        "description": "Orquestra a busca de pendências fiscais e guias em atraso nos microsserviços downstream (SaudeEmpresaService e ImpostosService) para renderizar o painel inicial do cliente.",
+        "operationId": "initImpostosV4",
+        "parameters": [
+          {
+            "name": "cnpj",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "CNPJ do cliente para apuração dos impostos"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payload de inicialização construído com sucesso"
+          },
+          "560": {
+            "description": "Erro de integração a jusante (downstream timeout ou bad request)"
+          }
+        }
+      }
+    },
+    "/impostos/v4/guias/emitir": {
+      "post": {
+        "x-gcp-service": "plataforma-web",
+        "summary": "Dispara a emissão de uma guia de imposto específica",
+        "description": "Envia uma requisição de emissão para o barramento do gateway bancário para gerar o boleto/guia DAS ou ISS de um período específico.",
+        "operationId": "emitirGuia",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "competencia": { "type": "string", "example": "2026-04" },
+                  "valor": { "type": "number", "example": 150.50 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Guia gerada com sucesso" },
+          "500": { "description": "Falha interna no processamento ou comunicação bancária" }
+        }
+      }
+    },
+    "/notas-fiscais/v1/emissao": {
+      "post": {
+        "x-gcp-service": "emissor-api",
+        "summary": "Emite uma Nota Fiscal de Serviço Eletrônica (NFS-e)",
+        "description": "Processa os dados da prestação de serviço e transmite diretamente para a prefeitura homologada do município do cliente.",
+        "operationId": "emitirNotaFiscal",
+        "responses": {
+          "200": { "description": "Nota emitida e transmitida com sucesso" },
+          "400": { "description": "Erro de validação nos campos de alíquota ou tomador" }
+        }
+      }
+    }
+  }
+}

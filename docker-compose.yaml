@@ -1,0 +1,67 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: hermes-postgres
+    ports:
+      - "${PG_PORT}:${PG_PORT}"
+    environment:
+      - POSTGRES_DB=${PG_DB}
+      - POSTGRES_USER=${PG_USER}
+      - POSTGRES_PASSWORD=${PG_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./resources/create_table.sql:/docker-entrypoint-initdb.d/create_table.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ingest-api:
+    build: .
+    container_name: hermes-ingest-api
+    env_file: .env
+    ports:
+      - "8001:8001"
+    environment:
+      - PG_HOST=db
+      - PG_USER=${PG_USER}
+      - PG_PASSWORD=${PG_PASSWORD}
+      - PG_DB=${PG_DB}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: hermes-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_storage:/root/.ollama
+
+  ollama-pull-model:
+    image: curlimages/curl:latest
+    container_name: hermes-ollama-setup
+    env_file: .env
+    depends_on:
+      - ollama
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo \"Waiting Ollama at http://ollama:11434... \";
+      until curl -s http://ollama:11434/api/tags > /dev/null; do sleep 2; done;
+      
+      echo \"Fetching LLM Model: $${LLM_MODEL}... \";
+      curl -X POST http://ollama:11434/api/pull -d \"{\\\"name\\\": \\\"$${LLM_MODEL}\\\"}\";
+      
+      echo \"Fetching Embedding Model: $${EMBEDDING_MODEL}... \";
+      curl -X POST http://ollama:11434/api/pull -d \"{\\\"name\\\": \\\"$${EMBEDDING_MODEL}\\\"}\";
+      
+      echo \"All set! Ambient fully configured.\";
+      "
+
+volumes:
+  postgres_data:
+  ollama_storage:
