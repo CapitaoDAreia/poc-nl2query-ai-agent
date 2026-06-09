@@ -18,26 +18,23 @@ services:
       retries: 5
 
   ingest-api:
-    build: .
-    container_name: hermes-ingest-api
-    env_file: .env
-    ports:
-      - "8001:8001"
-    environment:
-      - PG_HOST=db
-      - PG_USER=${PG_USER}
-      - PG_PASSWORD=${PG_PASSWORD}
-      - PG_DB=${PG_DB}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
-    depends_on:
-      db:
-        condition: service_healthy
+      build: .
+      container_name: hermes-ingest-api
+      env_file: .env
+      ports:
+        - "8001:8001"
+      environment:
+        - PG_HOST=db
+        - OLLAMA_HOST=http://ollama:11434 
+      depends_on:
+        db:
+          condition: service_healthy
 
   ollama:
     image: ollama/ollama:latest
     container_name: hermes-ollama
     ports:
-      - "11434:11434"
+      - "11435:11434"
     volumes:
       - ollama_storage:/root/.ollama
 
