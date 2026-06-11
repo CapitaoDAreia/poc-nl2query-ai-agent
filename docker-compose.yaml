@@ -25,7 +25,7 @@ services:
         - "8001:8001"
       environment:
         - PG_HOST=db
-        - OLLAMA_HOST=http://ollama:11434 
+        - OLLAMA_HOST=http://ollama:11434
       depends_on:
         db:
           condition: service_healthy

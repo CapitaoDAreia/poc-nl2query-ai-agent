@@ -8,17 +8,15 @@ dependencies = [
     "psycopg2-binary>=2.9.9",
     "python-dotenv>=1.0.1",
     "ollama>=0.2.1",
-    
     # Core/Ollama/Postgres
     "langchain>=0.3.28",
     "langchain-community>=0.3.31",
     "langchain-ollama>=0.3.10",
     "langchain-postgres>=0.0.17",
-    
     # State Manager
     "langgraph>=0.2.0",
-
     # API
     "fastapi>=0.110.0",
     "uvicorn>=0.28.0",
+    "sse-starlette>=3.4.4",
 ]
