@@ -1,6 +1,6 @@
-# agent/graph.py
 import os
 import sys
+import json
 from typing import TypedDict, List
 from dotenv import load_dotenv
 
@@ -55,40 +55,90 @@ class HermesGraphBuilder:
         return {"retrieved_docs": [], "rag_score": 0.0, "reasoning_steps": steps}
 
     def _generate_filter(self, state: AgentState) -> dict:
-        steps = state.get("reasoning_steps", [])
-        steps.append("Invocando LLM para tradução da pergunta em filtro do GCP Cloud Logging.")
-        
-        if not state["retrieved_docs"]:
-            return {"gcp_filter_query": "", "error_message": "Nenhum contexto técnico encontrado no RAG.", "reasoning_steps": steps}
+            print("Building GCP filter string using Schema-Driven Extraction...")
+            steps = state.get("reasoning_steps", []) or []
+            steps.append("Iniciando extração estruturada de parâmetros via LLM.")
             
-        doc = state["retrieved_docs"][0]
-        gcp_service = doc.metadata.get("gcp_service", "unknown")
-        path = doc.metadata.get("path", "")
-        
-        error_context = ""
-        if state.get("error_message"):
-            error_context = f"\nATENÇÃO: Seu filtro anterior falhou com o erro: {state['error_message']}. Corrija a sintaxe imediatamente."
-            steps.append(f"Reflexão ativada devido a falha anterior: {state['error_message']}")
-
-        prompt_consolidado = FILTER_GENERATION_PROMPT.format(
-            gcp_service=gcp_service,
-            path=path,
-            question=state["question"],
-            error_context=error_context
-        )
-
-        messages = [HumanMessage(content=prompt_consolidado)]
-        filter_string = ""
-        
-        try:
-            response = self.llm.invoke(messages)
-            filter_string = response.content.strip().replace("`", "").replace("\n", " ")
-            steps.append(f"Filtro gerado pela LLM: '{filter_string}'")
-        except Exception as e:
-            steps.append(f"Falha ao chamar a LLM: {str(e)}. Aplicando fallback interno.")
-            filter_string = f'resource.labels.module_id="{gcp_service}" AND jsonPayload.message:"{path}"'
+            if not state["retrieved_docs"]:
+                return {
+                    "gcp_filter_query": "", 
+                    "error_message": "Nenhum contexto técnico encontrado no RAG.",
+                    "reasoning_steps": steps
+                }
+                
+            doc = state["retrieved_docs"][0]
+            gcp_service = doc.metadata.get("gcp_service", "unknown")
+            path = doc.metadata.get("path", "")
             
-        return {"gcp_filter_query": filter_string, "reasoning_steps": steps}
+            error_context = ""
+            if state.get("error_message"):
+                error_context = f"\n⚠️ ATENÇÃO: Sua tentativa anterior gerou um JSON inválido ou incompleto. Erro: {state['error_message']}. Corrija o formato imediatamente."
+                steps.append(f"Reflexão ativada no gerador de filtros devido a erro anterior: {state['error_message']}")
+
+            prompt_consolidado = FILTER_GENERATION_PROMPT.format(
+                gcp_service=gcp_service,
+                path=path,
+                question=state["question"],
+                error_context=error_context
+            )
+
+            messages = [HumanMessage(content=prompt_consolidado)]
+            
+            try:
+                response = self.llm.invoke(messages)
+                raw_content = response.content.strip()
+                
+                if raw_content.startswith("```"):
+                    raw_content = raw_content.replace("```json", "").replace("```", "").strip()
+                
+                extracted_params = json.loads(raw_content)
+                
+                service_name = extracted_params.get("service_name", gcp_service)
+                resource_path = extracted_params.get("resource_path", path)
+                status_code = extracted_params.get("status_code")
+                
+                filter_chunks = [
+                    f'resource.labels.configuration_name="{service_name}"',
+                    f'protoPayload.resourceName:"{resource_path}"'
+                ]
+                
+                if status_code:
+                    filter_chunks.append(f'protoPayload.status.code={status_code}')
+                else:
+                    filter_chunks.append('protoPayload.status.code>=400')
+                    
+                filter_string = " AND ".join(filter_chunks)
+                
+                steps.append(f"Parâmetros extraídos com sucesso: {extracted_params}")
+                steps.append(f"Query determinística montada pelo Python: '{filter_string}'")
+                
+                return {
+                    "gcp_filter_query": filter_string, 
+                    "error_message": "", 
+                    "reasoning_steps": steps
+                }
+                
+            except json.JSONDecodeError as je:
+                error_msg = f"A LLM falhou em responder com um JSON válido. Erro de Parse: {str(je)}"
+                print(f"⚠️ {error_msg}")
+                steps.append(f"Falha de sintaxe no JSON gerado pela LLM. Enviando para autocorreção.")
+                
+                return {
+                    "gcp_filter_query": "", 
+                    "error_message": error_msg, 
+                    "reasoning_steps": steps
+                }
+                
+            except Exception as e:
+                error_msg = f"Falha inesperada no nó de geração de filtros: {str(e)}"
+                print(f"⚠️ {error_msg}")
+                steps.append(f"Erro inesperado: {str(e)}")
+                
+                return {
+                    "gcp_filter_query": "", 
+                    "error_message": error_msg, 
+                    "reasoning_steps": steps
+                }
 
     def _execute_gcp_query(self, state: AgentState) -> dict:
         steps = state.get("reasoning_steps", [])
